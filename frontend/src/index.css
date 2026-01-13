@@ -1,0 +1,109 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+        "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+        "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #050505; /* Slightly lighter than pure black for depth */
+    background-image: 
+        radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 0%, rgba(168, 85, 247, 0.05) 0%, transparent 50%);
+    background-attachment: fixed;
+}
+
+code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+        monospace;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+@layer base {
+  :root {
+        /* Dark Theme by Default */
+        --background: 0 0% 2%; /* #050505 */
+        --foreground: 0 0% 98%;
+
+        --card: 0 0% 3%;
+        --card-foreground: 0 0% 98%;
+
+        --popover: 0 0% 3%;
+        --popover-foreground: 0 0% 98%;
+
+        --primary: 142 76% 36%; /* Green-600 */
+        --primary-foreground: 0 0% 98%;
+
+        --secondary: 0 0% 9%;
+        --secondary-foreground: 0 0% 98%;
+
+        --muted: 0 0% 9%;
+        --muted-foreground: 0 0% 60%;
+
+        --accent: 0 0% 9%;
+        --accent-foreground: 0 0% 98%;
+
+        --destructive: 0 62.8% 30.6%;
+        --destructive-foreground: 0 0% 98%;
+
+        --border: 0 0% 12%;
+        --input: 0 0% 12%;
+        --ring: 142 76% 36%; /* Green Ring */
+
+        --radius: 1rem; /* More rounded */
+    }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    }
+  body {
+    @apply bg-background text-foreground;
+    }
+}
+
+/* Glassmorphism Utilities */
+.glass {
+    @apply bg-black/40 backdrop-blur-xl border border-white/5;
+}
+
+.glass-card {
+    @apply bg-[#0a0a0a]/60 backdrop-blur-2xl border border-white/5 shadow-2xl;
+}
+
+.glass-input {
+    @apply bg-white/5 border-white/10 text-white placeholder:text-white/20 focus:border-green-500/50 focus:ring-1 focus:ring-green-500/20 transition-all;
+}
+
+/* Animations */
+@keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+}
+
+.animate-float {
+    animation: float 6s ease-in-out infinite;
+}
