@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@radr/shadowwire": "^1.1.2",
     "@solana/web3.js": "^1.98.4",
     "axios": "^1.13.2",
     "body-parser": "^1.20.3",

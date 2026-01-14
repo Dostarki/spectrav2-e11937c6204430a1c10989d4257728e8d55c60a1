@@ -1,122 +1,132 @@
-const axios = require('axios');
 
-// Radr / ShadowPay API Service Wrapper
-// Documentation: https://registry.scalar.com/@radr/apis/shadowpay-api
+const { ShadowWireClient, initWASM, TokenUtils } = require('@radr/shadowwire');
 
-const RADR_BASE_URL = 'https://shadow.radr.fun';
+let client = null;
+let isInitialized = false;
 
 class RadrService {
     
-    // Register User & Get API Key
-    // Calls POST /shadowpay/v1/keys/new
-    static async registerUser(walletAddress) {
+    static async init() {
+        if (isInitialized) return;
         try {
-            console.log(`[RadrService] Registering user ${walletAddress}...`);
-            const response = await axios.post(`${RADR_BASE_URL}/shadowpay/v1/keys/new`, {
-                wallet_address: walletAddress
-            }, {
-                headers: { 'Content-Type': 'application/json' }
+            // Initialize WASM for ZK Proofs
+            await initWASM();
+            
+            // Initialize Client
+            // Debug mode enabled for logs
+            client = new ShadowWireClient({ 
+                debug: true 
             });
             
-            if (response.data && response.data.api_key) {
-                console.log(`[RadrService] API Key acquired for ${walletAddress}`);
-                return response.data.api_key;
-            }
-            throw new Error('No API key returned from Radr');
+            isInitialized = true;
+            console.log("? ShadowWire SDK Initialized");
         } catch (error) {
-            console.error('Radr Registration Error:', error.response?.data || error.message);
-            throw new Error('Radr Registration Failed: ' + (error.response?.data?.error || error.message));
+            console.error("? ShadowWire Init Failed:", error);
         }
     }
 
-    // 1. DEPOSIT (REAL)
-    // Creates an unsigned transaction for the user to sign and submit
-    static async createDepositTransaction(walletAddress, amount, apiKey) {
-        try {
-            console.log(`[RadrService] Creating Deposit TX for ${walletAddress}, Amount: ${amount}`);
-            console.log(`[RadrService] Using Key: ${apiKey ? apiKey.slice(0, 5) + '...' : 'NONE'}`);
-            
-            // Convert amount to lamports (1 SOL = 1e9 lamports)
-            const lamports = Math.floor(amount * 1000000000);
-
-            const response = await axios.post(`${RADR_BASE_URL}/shadowpay/api/escrow/deposit`, {
-                wallet_address: walletAddress,
-                amount: lamports
-            }, {
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-API-Key': apiKey 
-                }
-            });
-
-            console.log('[RadrService] Response Status:', response.status);
-            console.log('[RadrService] Response Data:', JSON.stringify(response.data));
-
-            // Map API response to expected format
-            // API returns 'transaction' (base64), we expected 'unsigned_tx_base64'
-            if (response.data && (response.data.unsigned_tx_base64 || response.data.transaction)) {
-                return {
-                    unsigned_tx_base64: response.data.transaction || response.data.unsigned_tx_base64
-                };
-            }
-            throw new Error('No transaction returned from Radr. Data: ' + JSON.stringify(response.data));
-        } catch (error) {
-            console.error('Radr Deposit Error Details:', error.response?.data || error.message);
-            throw new Error('Failed to create deposit transaction: ' + (error.response?.data?.error || error.message));
-        }
-    }
-
-    // 2. WITHDRAW (REAL)
-    // Creates an unsigned transaction for the user to withdraw from escrow
-    static async createWithdrawTransaction(walletAddress, amount, apiKey) {
-        try {
-            console.log(`[RadrService] Creating Withdraw TX for ${walletAddress}, Amount: ${amount}`);
-            
-            const lamports = Math.floor(amount * 1000000000);
-
-            const response = await axios.post(`${RADR_BASE_URL}/shadowpay/api/escrow/withdraw`, {
-                wallet: walletAddress, // Changed from wallet_address to wallet based on error log
-                amount: lamports
-            }, {
-                headers: { 'Content-Type': 'application/json' }
-            });
-
-            if (response.data && (response.data.unsigned_tx_base64 || response.data.transaction)) {
-                return {
-                    unsigned_tx_base64: response.data.transaction || response.data.unsigned_tx_base64
-                };
-            }
-            throw new Error('No transaction returned from Radr');
-        } catch (error) {
-            console.error('Radr Withdraw Error:', error.response?.data || error.message);
-            throw new Error('Failed to create withdraw transaction: ' + (error.response?.data?.error || error.message));
-        }
-    }
-
-    // 3. TRANSFER (REAL - Internal via Payment Intent)
-    static async executePrivateTransfer(senderId, recipientAddress, amount, token = 'SOL', apiKey) {
-        // ShadowWire Implementation:
-        // Since we are operating a Privacy Pool, internal transfers are settled off-chain
-        // to ensure zero-latency and zero-gas costs, while maintaining privacy.
-        // We validate the user's API Key against Radr to ensure they are an authorized participant.
-        
-        console.log(`[RadrService] Validating Transfer Session with API Key...`);
+    // Generate Unsigned Deposit Transaction
+    static async createDepositTx(walletAddress, amountSOL) {
+        if (!isInitialized) await this.init();
         
         try {
-            // Check limits/validity to ensure key is active
-            await axios.get(`${RADR_BASE_URL}/shadowpay/v1/keys/limits`, {
-                 headers: { 'X-API-Key': apiKey }
-            });
-        } catch (err) {
-            console.warn("[RadrService] Key validation warning:", err.message);
-            // We allow proceeding if it's just a rate limit, but strict mode would block.
-        }
+            console.log(`Creating Deposit TX for ${walletAddress}, Amount: ${amountSOL}`);
 
-        return {
-            txId: `SHADOW-WIRE-${Date.now()}`, // Internal Settlement ID
-            status: 'settled',
-            timestamp: new Date().toISOString()
-        };
+            // Convert SOL to Lamports (Manual calculation to be safe)
+            // SOL has 9 decimals. 1 SOL = 1,000,000,000 Lamports
+            const amountLamports = Math.floor(Number(amountSOL) * 1_000_000_000);
+            console.log(`Converted Amount: ${amountSOL} SOL -> ${amountLamports} Lamports`);
+
+            if (isNaN(amountLamports) || amountLamports <= 0) {
+                throw new Error("Invalid amount conversion");
+            }
+            
+            // Call ShadowWire SDK
+            const response = await client.deposit({
+                wallet: walletAddress,
+                amount: amountLamports, // Send as Integer
+                token: 'SOL'
+            });
+            
+            console.log("Deposit TX Response:", response);
+            // Handle different response formats (SDK vs Raw API)
+            return response.unsigned_tx_base64 || response.transaction;
+        } catch (error) {
+            console.error("ShadowWire Deposit Error:", error);
+            throw error;
+        }
+    }
+
+    // Generate Unsigned Withdraw Transaction
+    static async createWithdrawTx(walletAddress, amountSOL, destinationAddress = null) {
+        if (!isInitialized) await this.init();
+        
+        try {
+            console.log(`Creating Withdraw TX for ${walletAddress}, Amount: ${amountSOL}, Dest: ${destinationAddress}`);
+            
+            // Convert SOL to Lamports (Manual calculation)
+            const amountLamports = Math.floor(Number(amountSOL) * 1_000_000_000);
+            console.log(`Converted Withdraw Amount: ${amountSOL} SOL -> ${amountLamports} Lamports`);
+
+            if (isNaN(amountLamports) || amountLamports <= 0) {
+                throw new Error("Invalid amount conversion");
+            }
+
+            // Call ShadowWire SDK
+            // Trying to send 'recipient' or 'destination' to allow transfer to another wallet
+            const payload = {
+                wallet: walletAddress,
+                amount: amountLamports, // Send as Integer
+                token: 'SOL'
+            };
+
+            if (destinationAddress && destinationAddress !== walletAddress) {
+                payload.recipient = destinationAddress; // Try 'recipient' field
+                payload.destination = destinationAddress; // Try 'destination' field as fallback
+            }
+
+            const response = await client.withdraw(payload);
+            
+            console.log("Withdraw TX Response:", response);
+            return response.unsigned_tx_base64 || response.transaction;
+        } catch (error) {
+            console.error("ShadowWire Withdraw Error:", error);
+            throw error;
+        }
+    }
+
+    // Internal Transfer (Shielded)
+    // Sender -> Recipient (Both hidden)
+    static async createTransferTx(senderWallet, recipientWallet, amountSOL) {
+        if (!isInitialized) await this.init();
+
+        try {
+            // SDK's transfer method handles everything
+            const result = await client.transfer({
+                sender: senderWallet,
+                recipient: recipientWallet,
+                amount: amountSOL, // Transfer method takes SOL amount, not lamports (according to docs)
+                token: 'SOL',
+                type: 'internal'
+            });
+
+            return result;
+        } catch (error) {
+            console.error("ShadowWire Transfer Error:", error);
+            throw error;
+        }
+    }
+
+    // Get Shielded Balance
+    static async getBalance(walletAddress) {
+        if (!isInitialized) await this.init();
+        try {
+            const balance = await client.getBalance(walletAddress, 'SOL');
+            return balance; // { available, pool_address }
+        } catch (error) {
+            console.error("ShadowWire Balance Error:", error);
+            return { available: 0 };
+        }
     }
 }
 

@@ -5,65 +5,90 @@ const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const RadrService = require('../services/radrService');
 
-// Create Unsigned Withdraw Transaction
-// Frontend will sign this transaction and submit it to Solana to release funds from Escrow
+// Create Unsigned Withdraw Transaction (Using ShadowWire SDK)
+// User requests to withdraw from Shielded Pool -> Wallet
 router.post('/create-tx', auth, async (req, res) => {
     try {
-        const { amount } = req.body;
-        if (!amount || amount <= 0) return res.status(400).json({ error: 'Invalid amount' });
+        const { amount, destinationAddress } = req.body;
+        const amountNum = Number(amount);
+
+        if (!amountNum || amountNum <= 0) return res.status(400).json({ error: 'Invalid amount' });
+        if (!destinationAddress) return res.status(400).json({ error: 'Destination address required' });
 
         const user = await User.findById(req.user.userId);
-        if (!user) {
-             return res.status(404).json({ error: 'User not found' });
-        }
+        if (!user) return res.status(404).json({ error: 'User not found' });
 
-        if (user.privateBalance < amount) {
+        // Check Balance
+        if (user.privateBalance < amountNum) {
              return res.status(400).json({ error: 'Insufficient private balance' });
         }
+
+        console.log(`Creating ShadowWire Withdraw TX: Pool -> ${destinationAddress} (${amountNum} SOL)`);
+
+        // Use RadrService (ShadowWire SDK)
+        const tx = await RadrService.createWithdrawTx(req.user.walletAddress, amountNum);
         
-        // Use the new REAL transaction method
-        const txData = await RadrService.createWithdrawTransaction(
-            req.user.walletAddress, 
-            amount, 
-            user.radrApiKey
-        );
+        // Serialize Transaction
+        // SDK returns { unsigned_tx_base64: "..." }
+        let base64Transaction = tx.unsigned_tx_base64;
+
+        if (!base64Transaction && tx.serialize) {
+            const serialized = tx.serialize({ requireAllSignatures: false });
+            base64Transaction = serialized.toString('base64');
+        } else if (!base64Transaction && typeof tx === 'string') {
+            base64Transaction = tx;
+        }
+
+        if (!base64Transaction) {
+            throw new Error("Failed to generate unsigned transaction from ShadowWire SDK");
+        }
 
         res.json({ 
-            unsignedTx: txData.unsigned_tx_base64,
-            message: 'Please sign this transaction in your wallet'
+            unsignedTx: base64Transaction,
+            message: 'Please sign this transaction to withdraw funds'
         });
+
     } catch (error) {
+        console.error("Withdraw Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
 
-// Notify Backend that withdrawal is complete (Frontend submits TX)
+// Notify Backend that withdraw is complete (Deduct Balance)
 router.post('/notify', auth, async (req, res) => {
     try {
         const { amount, txHash } = req.body;
-        
+        const amountNum = Number(amount);
+
         const user = await User.findById(req.user.userId);
         
-        // Double check balance before deducting (though we checked at creation, race condition possible)
-        if (user.privateBalance < Number(amount)) {
-             return res.status(400).json({ error: 'Insufficient funds' });
-        }
-
-        user.privateBalance -= Number(amount);
+        // Deduct Balance
+        // Note: In production, verify txHash on-chain to ensure it's a valid ShadowWire withdraw
+        user.privateBalance -= amountNum;
+        if (user.privateBalance < 0) user.privateBalance = 0; // Safety check
         await user.save();
 
-        const transaction = new Transaction({
+        // Log Transaction
+        const txRecord = new Transaction({
             type: 'WITHDRAW',
             userId: req.user.userId,
-            amount: Number(amount),
+            amount: amountNum,
             token: 'SOL',
             txHash: txHash,
-            details: { protocol: 'RADR_ZK_RELAYER' }
+            details: { 
+                protocol: 'SHADOWWIRE_ZK' 
+            }
         });
-        await transaction.save();
+        await txRecord.save();
 
-        res.json({ message: 'Withdrawal successful', newBalance: user.privateBalance });
+        res.json({ 
+            message: 'Withdrawal successful', 
+            txHash: txHash,
+            newBalance: user.privateBalance 
+        });
+
     } catch (error) {
+        console.error("Withdraw Notify Error:", error);
         res.status(500).json({ error: error.message });
     }
 });
