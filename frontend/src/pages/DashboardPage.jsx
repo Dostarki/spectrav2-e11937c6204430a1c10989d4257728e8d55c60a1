@@ -118,7 +118,7 @@ const DashboardPage = () => {
                 return storedToken;
             }
 
-            const message = `Sign this message to authenticate with Spectra Privacy Layer. Wallet: ${address}`;
+            const message = `Sign this message to authenticate with Spectre Privacy Layer. Wallet: ${address}`;
             const encodedMessage = new TextEncoder().encode(message);
             const signedMessage = await window.phantom.solana.signMessage(encodedMessage, "utf8");
             
@@ -245,9 +245,9 @@ const DashboardPage = () => {
                 <div className="flex items-center gap-3">
                     <div className="relative group">
                         <div className="absolute -inset-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-full blur opacity-20 group-hover:opacity-40 transition duration-500"></div>
-                        <img src="https://i.hizliresim.com/852gn2e.png" alt="Spectra" className="relative w-8 h-8 rounded-lg shadow-lg" />
+                        <img src="https://i.hizliresim.com/852gn2e.png" alt="Spectre" className="relative w-8 h-8 rounded-lg shadow-lg" />
                     </div>
-                    <span className="font-bold text-lg tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">SPECTRA</span>
+                    <span className="font-bold text-lg tracking-wide bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">Spectre</span>
                 </div>
                 
                 <div className="flex items-center gap-6">
